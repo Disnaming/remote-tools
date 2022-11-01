@@ -12,6 +12,8 @@ pub enum Error {
     InvalidZone(LowerName),
     #[error("IO error: {0:}")]
     Io(#[from] std::io::Error),
+    #[error("Message parsing error: {0:}")]
+    MessageRouteInvalidFormat(LowerName),
     #[error("crap")]
     Error()
 

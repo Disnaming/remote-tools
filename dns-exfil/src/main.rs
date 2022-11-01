@@ -17,9 +17,10 @@ async fn main() {
     let host = "0.0.0.0";
     let port = "8888";
     let addr = format!("{}:{}", host, port);
+    let domain = "disna-m.top";
     env::set_var("RUST_LOG", "debug");
     env_logger::init();
-    let handler = MainHandler::create_request_handler();
+    let handler = MainHandler::create_request_handler(domain);
     let mut server = ServerFuture::new(handler);
     let socket_result = UdpSocket::bind(addr).await;
     let socket = match socket_result {
@@ -32,15 +33,15 @@ async fn main() {
     return ();
 }
 
-#[derive(Clone, Debug)]
+// #[derive(Clone, Debug)]
 pub struct MainHandler {
     delegator: Delegator,
 }
 
 impl MainHandler {
-    pub fn create_request_handler() -> Self {
+    pub fn create_request_handler(domain: &str) -> Self {
         return MainHandler{
-            delegator: Delegator::new("disna-m.top"),
+            delegator: Delegator::new(domain),
         };
     }
     
