@@ -8,6 +8,7 @@ use crate::delegator::root::RootHandler;
 use crate::delegator::message::MessageHandler;
 
 
+use tokio::sync::Mutex;
 use trust_dns_server::client::rr::LowerName;
 use trust_dns_server::server::{Request,ResponseHandler,ResponseInfo};
 use trust_dns_server::proto::op::{Header};
@@ -15,20 +16,31 @@ use trust_dns_server::proto::rr::{RData, Record};
 use trust_dns_server::authority::{MessageResponseBuilder};
 use std::str::FromStr;
 use std::net::IpAddr;
+use std::sync::Arc;
 
+// concrete implementations of the HandlerInterface
 #[async_trait::async_trait]
 pub trait BaseHandler {
     async fn build_basic_response<R: ResponseHandler>(req: &Request, res: R) -> Result<ResponseInfo, Error>;
 }
 
 #[async_trait::async_trait]
-pub trait Handler: BaseHandler {
-    async fn handle_request<R: ResponseHandler>(&self, req: &Request, mut res: R) -> Result<ResponseInfo, Error>;
+pub trait HandlerInterface: BaseHandler {
     fn get_zone(&self) -> &LowerName;
 }
 
 #[async_trait::async_trait]
-impl <T: Handler> BaseHandler for T {
+pub trait MutableHandler: HandlerInterface {
+    async fn handle_request<R: ResponseHandler>(&mut self, req: &Request, mut res: R) -> Result<ResponseInfo, Error>;
+}
+
+#[async_trait::async_trait]
+pub trait ImmutableHandler: HandlerInterface {
+    async fn handle_request<R: ResponseHandler>(&self, req: &Request, mut res: R) -> Result<ResponseInfo, Error>;
+}
+
+#[async_trait::async_trait]
+impl <T: HandlerInterface> BaseHandler for T {
     async fn build_basic_response<R: ResponseHandler>(req: &Request, mut res: R) -> Result<ResponseInfo, Error> {
         let builder = MessageResponseBuilder::from_message_request(req);
         let mut header = Header::response_from_request(req.header());
@@ -50,16 +62,16 @@ impl <T: Handler> BaseHandler for T {
 
 // #[derive(Clone, Debug)]
 pub struct Delegator {
-    pub root_handler: RootHandler,
-    pub exfil_handler: ExfilHandler,
-    pub message_handler: MessageHandler,
+    pub root_handler: Arc<RootHandler>,
+    pub exfil_handler: Arc<ExfilHandler>,
+    pub message_handler: Mutex<Arc<MessageHandler>>, // holds state
 }
 impl Delegator {
     pub fn new(root_zone: &str) -> Self {
         return Delegator { 
-            root_handler: RootHandler::new( LowerName::from_str(root_zone).unwrap()),
-            exfil_handler: ExfilHandler::new(Delegator::construct_subdomain(root_zone, "exfil")), 
-            message_handler: MessageHandler::new(Delegator::construct_subdomain(root_zone, "message")),
+            root_handler: Arc::new(RootHandler::new( LowerName::from_str(root_zone).unwrap())),
+            exfil_handler: Arc::new(ExfilHandler::new(Delegator::construct_subdomain(root_zone, "exfil"))), 
+            message_handler: Mutex::new(Arc::new(MessageHandler::new(Delegator::construct_subdomain(root_zone, "message")))),
         }
     }
 
@@ -75,7 +87,7 @@ impl Delegator {
         let name = req.query().name();
         match name {
             name if self.exfil_handler.get_zone().zone_of(name) => self.exfil_handler.handle_request(req, res).await,
-            name if self.message_handler.get_zone().zone_of(name) => self.message_handler.handle_request(req, res).await,
+            // name if self.message_handler.get_zone().zone_of(name) => self.message_handler.handle_request(req, res).await,
             name if self.root_handler.get_zone().zone_of(name) => self.root_handler.handle_request(req, res).await,
             name => Err(Error::InvalidZone(name.clone()))
         }

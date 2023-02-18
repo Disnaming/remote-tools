@@ -14,4 +14,5 @@ log = "0.4.17"
 thiserror = "1.0.37"
 tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread", "net"] }
 tracing = "0.1.37"
-trust-dns-server = "0.22.0"
+trust-dns-server = "0.21.2"
+trust-dns-resolver = "0.21.2"
